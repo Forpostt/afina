@@ -1,20 +1,30 @@
-#include 'Node.h'
+#include "Node.hpp"
 
 template <class T>
 class List{
     public:
         List() : tail(nullptr), head(nullptr) {};
         ~List();
-        void push_front(T& value);
+        void push_front(T&& value);
         T& get(Node<T>* node);
-        void delete(Node<T>* node);
-    private:
+        void del(Node<T>* node);
         Node<T>* tail;
         Node<T>* head;
+};
+
+template <class T>
+List<T>::~List(){
+    Node<T>* cur = head;
+    while (cur != nullptr){
+        cur = head->next;
+        head->next = nullptr;
+        delete head;
+        head = cur;
+    }
 }
 
 template <class T>
-void List<T>::push_front(T& value){
+void List<T>::push_front(T&& value){
     if (head == nullptr){
         Node<T> *node = new Node<T>;
         node->value = value;
@@ -36,7 +46,8 @@ T& List<T>::get(Node<T>* node){
         return head->value;
     
     if (node == tail){
-        node->prev->next = nullptr;
+        tail = node->prev;
+        tail->next = nullptr;
         node->prev = nullptr;
         node->next = head;
         head->prev = node;
@@ -54,7 +65,7 @@ T& List<T>::get(Node<T>* node){
 }
 
 template <class T>
-void List<T>::delete(Node<T>* node){
+void List<T>::del(Node<T>* node){
     if (node == head){
         head = node->next;
         node->next = nullptr;

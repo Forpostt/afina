@@ -2,8 +2,8 @@
 
 template <class T>
 struct Node{
-    Node() : prev(nulltr), next(nullptr) {};
+    Node() : prev(nullptr), next(nullptr) {};
     Node* prev;
     Node* next;
     T value;
-}
+};

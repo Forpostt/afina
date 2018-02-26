@@ -1,88 +1,95 @@
-#include "Node.hpp"
+template <class T>
+struct Entry{
+    Entry() : _prev(nullptr), _next(nullptr) {};
+    Entry* _prev;
+    Entry* _next;
+    T value;
+};
 
 template <class T>
 class List{
     public:
-        List() : tail(nullptr), head(nullptr) {};
+        List() : _tail(nullptr), _head(nullptr) {};
         ~List();
-        void push_front(T&& value);
-        T& get(Node<T>* node);
-        void del(Node<T>* node);
-        Node<T>* tail;
-        Node<T>* head;
+        bool push_front(T&& value);
+        T& get(Entry<T>* node);
+        bool del(Entry<T>* node);
+        
+        Entry<T>* _tail;
+        Entry<T>* _head;
 };
 
 template <class T>
 List<T>::~List(){
-    Node<T>* cur = head;
+    Entry<T>* cur = _head;
     while (cur != nullptr){
-        cur = head->next;
-        head->next = nullptr;
-        delete head;
-        head = cur;
+        cur = _head->_next;
+        _head->_next = nullptr;
+        delete _head;
+        _head = cur;
     }
 }
 
 template <class T>
-void List<T>::push_front(T&& value){
-    if (head == nullptr){
-        Node<T> *node = new Node<T>;
+bool List<T>::push_front(T&& value){
+    if (_head == nullptr){
+        Entry<T> *node = new Entry<T>;
         node->value = value;
-        head = node;
-        tail = node;
-        return;
+        _head = node;
+        _tail = node;
+        return true;
     }
-    Node<T>* node = new Node<T>;
+    Entry<T>* node = new Entry<T>;
     node->value = value;
-    node->next = head;
-    head->prev = node;
-    head = node;
-    return;
+    node->_next = _head;
+    _head->_prev = node;
+    _head = node;
+    return true;
 }
 
 template <class T>
-T& List<T>::get(Node<T>* node){
-    if (node == head)
-        return head->value;
+T& List<T>::get(Entry<T>* node){
+    if (node == _head)
+        return _head->value;
     
-    if (node == tail){
-        tail = node->prev;
-        tail->next = nullptr;
-        node->prev = nullptr;
-        node->next = head;
-        head->prev = node;
-        head = node;
-        return head->value;
+    if (node == _tail){
+        _tail = node->_prev;
+        _tail->_next = nullptr;
+        node->_prev = nullptr;
+        node->_next = _head;
+        _head->_prev = node;
+        _head = node;
+        return _head->value;
     }
     
-    node->prev->next = node->next;
-    node->next->prev = node->prev;
-    node->prev = nullptr;
-    node->next = head;
-    head->prev = node;
-    head = node;
-    return head->value;
+    node->_prev->_next = node->_next;
+    node->_next->_prev = node->_prev;
+    node->_prev = nullptr;
+    node->_next = _head;
+    _head->_prev = node;
+    _head = node;
+    return _head->value;
 }
 
 template <class T>
-void List<T>::del(Node<T>* node){
-    if (node == head){
-        head = node->next;
-        node->next = nullptr;
+bool List<T>::del(Entry<T>* node){
+    if (node == _head){
+        _head = node->_next;
+        node->_next = nullptr;
         delete node;
-        return;
+        return true;
     }
     
-    if (node == tail){
-        tail = node->prev;
-        node->prev = nullptr;
+    if (node == _tail){
+        _tail = node->_prev;
+        node->_prev = nullptr;
         delete node;
-        return;
+        return true;
     }
     
-    node->prev->next = node->next;
-    node->next->prev = node->prev;
-    node->prev = node->next = nullptr;
+    node->_prev->_next = node->_next;
+    node->_next->_prev = node->_prev;
+    node->_prev = node->_next = nullptr;
     delete node;
-    return;
+    return true;
 }

@@ -26,7 +26,7 @@ void test_3(){
     my_list.push_front(10);
     my_list.push_front(11);
     my_list.push_front(12);
-    Node<int>* node = my_list.head->next;
+    Entry<int>* node = my_list.head->next;
     my_list.get(node);
     std::cout << my_list.head->value << std::endl;
     std::cout << my_list.head->next->value << std::endl;

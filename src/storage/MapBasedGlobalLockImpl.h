@@ -6,6 +6,7 @@
 #include <string>
 
 #include <afina/Storage.h>
+#include <List.h>
 
 namespace Afina {
 namespace Backend {
@@ -37,7 +38,8 @@ public:
 
 private:
     size_t _max_size;
-    std::map<std::string, std::string> _backend;
+    std::unordered_map<std::string, Entry<std::string>* > _hash_table;
+    List<std::string> _list;
 };
 
 } // namespace Backend

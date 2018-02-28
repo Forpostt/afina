@@ -1,28 +1,48 @@
-template <class T>
-struct Entry{
-    Entry() : _prev(nullptr), _next(nullptr) {};
-    Entry* _prev;
-    Entry* _next;
-    T value;
-};
+#ifndef AFINA_STORAGE_MAP_BASED_GLOBAL_LOCK_IMPL_H
+#define AFINA_STORAGE_MAP_BASED_GLOBAL_LOCK_IMPL_H
 
-template <class T>
+#include <string>
+#include <iostream>
+
 class List{
     public:
+        struct Entry;
+    
         List() : _tail(nullptr), _head(nullptr) {};
         ~List();
-        bool push_front(T&& value);
-        T& get(Entry<T>* node);
-        bool del(Entry<T>* node);
         
-        Entry<T>* _tail;
-        Entry<T>* _head;
+        void PushFront(std::string &key, std::string &value);
+        void ToFront(Entry* node);    
+        void Del(Entry* node);    
+        std::string& GetValue(Entry* node);
+        const std::string& GetTailKey() const;
+    
+        struct Entry{
+            Entry() : _prev(nullptr), _next(nullptr) {};
+            Entry(std::string &key, std::string &value, Entry* next, Entry* prev) : 
+                                        _key(key), _value(value), _next(next), _prev(prev) {};
+            size_t size(); 
+            
+            Entry* _prev;
+            Entry* _next;
+            std::string _value;
+            const std::string _key;
+        };      
+    
+    //private:
+        Entry* _tail;
+        Entry* _head;
 };
 
-template <class T>
-List<T>::~List(){
-    Entry<T>* cur = _head;
+size_t List::Entry::size(){
+    return _key.size() + _value.size();
+}
+
+List::~List(){
+    std::cout << "~List()" << std::endl;
+    Entry* cur = _head;
     while (cur != nullptr){
+        std::cout << _head->_value << std::endl;
         cur = _head->_next;
         _head->_next = nullptr;
         delete _head;
@@ -30,36 +50,31 @@ List<T>::~List(){
     }
 }
 
-template <class T>
-bool List<T>::push_front(T&& value){
+void List::PushFront(std::string &key, std::string &value){
     if (_head == nullptr){
-        Entry<T> *node = new Entry<T>;
-        node->value = value;
+        Entry* node = new Entry(key, value, nullptr, nullptr);
         _head = node;
         _tail = node;
-        return true;
+        return;
     }
-    Entry<T>* node = new Entry<T>;
-    node->value = value;
-    node->_next = _head;
+    Entry* node = new Entry(key, value, _head, nullptr);
     _head->_prev = node;
     _head = node;
-    return true;
+    return;
 }
 
-template <class T>
-T& List<T>::get(Entry<T>* node){
-    if (node == _head)
-        return _head->value;
+void List::ToFront(Entry* node){
+    if (_head == node)
+        return;
     
-    if (node == _tail){
+    if (_tail == node){
         _tail = node->_prev;
         _tail->_next = nullptr;
         node->_prev = nullptr;
         node->_next = _head;
         _head->_prev = node;
         _head = node;
-        return _head->value;
+        return;
     }
     
     node->_prev->_next = node->_next;
@@ -68,28 +83,64 @@ T& List<T>::get(Entry<T>* node){
     node->_next = _head;
     _head->_prev = node;
     _head = node;
-    return _head->value;
+    return;
 }
 
-template <class T>
-bool List<T>::del(Entry<T>* node){
-    if (node == _head){
-        _head = node->_next;
-        node->_next = nullptr;
-        delete node;
-        return true;
-    }
+std::string& List::GetValue(Entry* node){
+    if (node == _head)
+        return _head->_value;
     
     if (node == _tail){
         _tail = node->_prev;
+        _tail->_next = nullptr;
+        node->_prev = nullptr;
+        node->_next = _head;
+        _head->_prev = node;
+        _head = node;
+        return _head->_value;
+    }
+    
+    node->_prev->_next = node->_next;
+    node->_next->_prev = node->_prev;
+    node->_prev = nullptr;
+    node->_next = _head;
+    _head->_prev = node;
+    _head = node;
+    return _head->_value;
+}
+
+const std::string& List::GetTailKey() const{
+    return _tail->_key;
+}
+
+void List::Del(Entry* node){
+    if (_head == _tail){
+        delete _head;
+        _head = _tail = nullptr;
+        return;
+    }
+    
+    if (node == _head){
+        _head->_next->_prev = nullptr;
+        _head = node->_next;
+        node->_next = nullptr;
+        delete node;
+        return;
+    }
+    
+    if (node == _tail){
+        _tail->_prev->_next = nullptr;
+        _tail = node->_prev;
         node->_prev = nullptr;
         delete node;
-        return true;
+        return;
     }
     
     node->_prev->_next = node->_next;
     node->_next->_prev = node->_prev;
     node->_prev = node->_next = nullptr;
     delete node;
-    return true;
+    return;
 }
+
+#endif

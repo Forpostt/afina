@@ -6,7 +6,7 @@
 #include <string>
 
 #include <afina/Storage.h>
-#include <List.h>
+#include <List.hpp>
 
 namespace Afina {
 namespace Backend {
@@ -18,7 +18,7 @@ namespace Backend {
  */
 class MapBasedGlobalLockImpl : public Afina::Storage {
 public:
-    MapBasedGlobalLockImpl(size_t max_size = 1024) : _max_size(max_size) {}
+    MapBasedGlobalLockImpl(size_t max_size = 1024) : _max_size(max_size), _size(0) {}
     ~MapBasedGlobalLockImpl() {}
 
     // Implements Afina::Storage interface
@@ -37,9 +37,14 @@ public:
     bool Get(const std::string &key, std::string &value) const override;
 
 private:
+    bool PutCrowdingOut(const std::string &key, const std::string &value) override;
+    
     size_t _max_size;
-    std::unordered_map<std::string, Entry<std::string>* > _hash_table;
-    List<std::string> _list;
+    std::unordered_map<std::string, List::Entry* > _hash_table;
+    
+    mutable size_t _size;
+    mutable List _list;
+    mutable std::mutex _mutex;
 };
 
 } // namespace Backend

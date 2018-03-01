@@ -36,7 +36,9 @@ public:
     // Implements Afina::Storage interface
     bool Get(const std::string &key, std::string &value) const override;
 
-private: 
+private:
+    bool DeleteUnlock(const std::string &key);
+    
     size_t _max_size;
     std::unordered_map<std::string, List::Entry* > _hash_table;
     

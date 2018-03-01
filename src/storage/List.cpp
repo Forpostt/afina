@@ -25,29 +25,6 @@ void List::PushFront(const std::string &key, const std::string &value){
     return;
 }
 
-void List::ToFront(Entry* node){
-    if (_head == node)
-        return;
-    
-    if (_tail == node){
-        _tail = node->_prev;
-        _tail->_next = nullptr;
-        node->_prev = nullptr;
-        node->_next = _head;
-        _head->_prev = node;
-        _head = node;
-        return;
-    }
-    
-    node->_prev->_next = node->_next;
-    node->_next->_prev = node->_prev;
-    node->_prev = nullptr;
-    node->_next = _head;
-    _head->_prev = node;
-    _head = node;
-    return;
-}
-
 std::string& List::GetValue(Entry* node){
     if (node == _head)
         return _head->_value;

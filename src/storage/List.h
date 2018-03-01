@@ -10,10 +10,10 @@ class List{
         List() : _tail(nullptr), _head(nullptr) {};
         ~List();
         
-        void PushFront(const std::string &key, const std::string &value);
-        void ToFront(Entry* node);    
+        void PushFront(const std::string &key, const std::string &value);    
         void Del(Entry* node);    
         void Remove();
+        
         std::string& GetValue(Entry* node);
         const std::string& GetTailKey() const;
         Entry* Head() const;

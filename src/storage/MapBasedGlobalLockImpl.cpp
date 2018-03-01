@@ -18,6 +18,7 @@ bool MapBasedGlobalLockImpl::Put(const std::string &key, const std::string &valu
     
         _list.PushFront(key, value);
         _hash_table.insert(std::make_pair(key, _list.Head()));
+        _list.SetKey(_list.Head(), _hash_table.find(key)->first);
         _size += key.size() + value.size();
         return true; 
     }
@@ -50,6 +51,7 @@ bool MapBasedGlobalLockImpl::PutIfAbsent(const std::string &key, const std::stri
     
     _list.PushFront(key, value);
     _hash_table.insert(std::make_pair(key, _list.Head()));
+    _list.SetKey(_list.Head(), _hash_table.find(key)->first);
     _size += key.size() + value.size();
     
     return true; 

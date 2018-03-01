@@ -1,7 +1,7 @@
 #include "List.h"
 
 size_t List::Entry::size(){
-    return _key.size() + _value.size();
+    return _key->size() + _value.size();
 }
 
 List::~List(){
@@ -10,6 +10,11 @@ List::~List(){
 
 List::Entry* List::Head() const{
     return _head;
+}
+
+List::Entry::~Entry(){
+    _value.clear();
+    _key = nullptr;
 }
 
 void List::PushFront(const std::string &key, const std::string &value){
@@ -49,7 +54,7 @@ std::string& List::GetValue(Entry* node){
 }
 
 const std::string& List::GetTailKey() const{
-    return _tail->_key;
+    return *(_tail->_key);
 }
 
 void List::Del(Entry* node){
@@ -90,4 +95,8 @@ void List::Remove(){
         delete _head;
         _head = cur;
     }
+}
+
+void List::SetKey(Entry* node, const std::string& key){
+    node->_key = &key;
 }

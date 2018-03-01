@@ -13,21 +13,23 @@ class List{
         void PushFront(const std::string &key, const std::string &value);    
         void Del(Entry* node);    
         void Remove();
-        
+        void SetKey(Entry* node, const std::string &key);
+    
         std::string& GetValue(Entry* node);
         const std::string& GetTailKey() const;
         Entry* Head() const;
     
         struct Entry{
-            Entry() : _prev(nullptr), _next(nullptr) {};
+            Entry() : _prev(nullptr), _next(nullptr), _key(nullptr) {};
             Entry(const std::string &key, const std::string &value, Entry* next, Entry* prev) : 
-                                        _key(key), _value(value), _next(next), _prev(prev) {};
+                                        _key(&key), _value(value), _next(next), _prev(prev) {};
+            ~Entry();
             size_t size(); 
             
             Entry* _prev;
             Entry* _next;
             std::string _value;
-            const std::string _key;
+            const std::string* _key;
         };      
     
     private:

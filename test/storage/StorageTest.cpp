@@ -94,7 +94,7 @@ TEST(StorageTest, MaxTest) {
         storage.Put(key, val);
      }
     
-
+    std::cout << std::endl;
      for(long i=100; i<1100; ++i)
      {
         auto key = pad_space("Key " + std::to_string(i), length);

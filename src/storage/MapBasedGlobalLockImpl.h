@@ -19,7 +19,9 @@ namespace Backend {
 class MapBasedGlobalLockImpl : public Afina::Storage {
 public:
     MapBasedGlobalLockImpl(size_t max_size = 1024) : _max_size(max_size), _size(0) {}
-    ~MapBasedGlobalLockImpl() { _list.Remove(); }
+    ~MapBasedGlobalLockImpl() { 
+        _list.Remove(); 
+    }
 
     // Implements Afina::Storage interface
     bool Put(const std::string &key, const std::string &value) override;
@@ -40,7 +42,7 @@ private:
     bool DeleteUnlock(const std::string &key);
     
     size_t _max_size;
-    std::unordered_map<std::string, List::Entry* > _hash_table;
+    std::unordered_map<std::reference_wrapper<const std::string>, List::Entry*, std::hash<std::string>, std::equal_to<const std::string> > _hash_table;
     
     mutable size_t _size;
     mutable List _list;

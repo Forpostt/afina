@@ -1,5 +1,6 @@
 .idea
 generated/*
+try/*
 
 # local cmake builds
 /build

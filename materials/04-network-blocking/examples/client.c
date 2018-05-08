@@ -5,7 +5,8 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <stdio.h>
-#include<string.h>
+#include <string.h>
+#include <time.h>
  
 int main(int argc,char **argv)
 {
@@ -23,15 +24,17 @@ int main(int argc,char **argv)
     inet_pton(AF_INET,"127.0.0.1",&(servaddr.sin_addr));
  
     connect( Socket, (struct sockaddr *)&servaddr,sizeof(servaddr) );
- 
-    while(1)
-    {
-        bzero( recvline, 100);
-        read( Socket, recvline, 100);
+    bzero( recvline, 100);
+    int i = 0;
+    while(1) {
+
+        if (recv( Socket, &recvline[0], 100, 0) <= 0)
+            break;
 
         printf("%s",recvline);
 
-	break;
+
     }
- 
+    shutdown(Socket, 2);
+    close(Socket);
 }

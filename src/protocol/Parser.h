@@ -43,7 +43,7 @@ public:
     bool Parse(const char *input, const size_t size, size_t &parsed);
 
     /**
-     * Builds new command from parsed input. In case if it wasn't enough input to prse command out
+     * Builds new command from parsed input. In case if it wasn't enough input to parse command out
      * method return nullptr
      */
     std::unique_ptr<Execute::Command> Build(uint32_t &body_size) const;

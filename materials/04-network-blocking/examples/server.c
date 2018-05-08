@@ -4,15 +4,17 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include <stdio.h>
-#include<string.h>
+#include <string.h>
+#include <arpa/inet.h>
  
 int main()
 {
  
     char str[100];
     int MasterSock, SlaveSock;
- 
-    struct sockaddr_in servaddr;
+    socklen_t len;
+
+    struct sockaddr_in servaddr, cliaddr;
  
     MasterSock = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -27,16 +29,29 @@ int main()
     bind(MasterSock, (struct sockaddr *) &servaddr, sizeof(servaddr));
  
     listen(MasterSock, 10);
- 
-    while(1)
+
+
+    char buff[20];
+    len = sizeof(cliaddr);
+
+    char strr[] = "HELLdgdfgsdgsrgseO!\r\n";
+
+    SlaveSock = accept(MasterSock, (struct sockaddr*) &cliaddr, &len);
+
+    printf("connection from %s, port %d\n", inet_ntop(AF_INET, &cliaddr.sin_addr, buff, sizeof(buff)),
+           ntohs(cliaddr.sin_port));
+    int i = 0;
+    while(i < 10)
     {
-    	SlaveSock = accept(MasterSock, (struct sockaddr*) NULL, NULL);
 
-	char *str = "HELLO!\r\n";
- 
-        write(SlaveSock, str, strlen(str)+1);
-
-	shutdown(SlaveSock, 2);
-	close(SlaveSock);
+        if (write(SlaveSock, strr, strlen(strr)+1) <= 0)
+            break;
+        printf("%s", strr);
+        i += 1;
     }
+    for (i = 0; i < 10000000; i++){
+        len += 1;
+    }
+    shutdown(SlaveSock, 2);
+    close(SlaveSock);
 }

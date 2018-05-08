@@ -6,8 +6,10 @@
 #include <mutex>
 #include <pthread.h>
 #include <unordered_set>
+#include <afina/execute/Command.h>
 
 #include <afina/network/Server.h>
+#include <protocol/Parser.h>
 
 namespace Afina {
 namespace Network {
@@ -40,10 +42,13 @@ protected:
     /**
      * Methos is running for each connection
      */
-    void RunConnection();
+    void RunConnection(int client_socket);
 
 private:
     static void *RunAcceptorProxy(void *p);
+
+    static void *RunConnectionProxy(void *p);
+
 
     // Atomic flag to notify threads when it is time to stop. Note that
     // flag must be atomic in order to safely publisj changes cross thread
@@ -73,6 +78,8 @@ private:
     // Threads that are processing connection data, permits
     // access only from inside of accept_thread
     std::unordered_set<pthread_t> connections;
+
+    const std::string msg_end = "\r\n";
 };
 
 } // namespace Blocking

@@ -5,6 +5,7 @@
 #include <iostream>
 #include <memory>
 #include <stdexcept>
+#include <utility>
 
 #include <pthread.h>
 #include <signal.h>
@@ -18,6 +19,7 @@
 #include <unistd.h>
 
 #include <afina/Storage.h>
+#include <protocol/Parser.h>
 
 namespace Afina {
 namespace Network {
@@ -30,8 +32,26 @@ void *ServerImpl::RunAcceptorProxy(void *p) {
     } catch (std::runtime_error &ex) {
         std::cerr << "Server fails: " << ex.what() << std::endl;
     }
+
     return 0;
 }
+
+void *ServerImpl::RunConnectionProxy(void *p) {
+    auto *item = reinterpret_cast<std::pair<ServerImpl *, int> *>(p);
+    try {
+        item->first->RunConnection(item->second);
+    } catch (std::runtime_error &ex) {
+        std::cerr << "Connection fails: " << ex.what() << std::endl;
+        close(item->second);
+    }
+    std::cout << "End of work client" << std::endl;
+    {
+        std::lock_guard<std::mutex> lock(item->first->connections_mutex);
+        item->first->connections.erase(pthread_self());
+    }
+    return 0;
+}
+
 
 // See Server.h
 ServerImpl::ServerImpl(std::shared_ptr<Afina::Storage> ps) : Server(ps) {}
@@ -49,40 +69,16 @@ void ServerImpl::Start(uint32_t port, uint16_t n_workers) {
     sigset_t sig_mask;
     sigemptyset(&sig_mask);
     sigaddset(&sig_mask, SIGPIPE);
-    if (pthread_sigmask(SIG_BLOCK, &sig_mask, NULL) != 0) {
+    if (pthread_sigmask(SIG_BLOCK, &sig_mask, nullptr) != 0) {
         throw std::runtime_error("Unable to mask SIGPIPE");
     }
 
-    // Setup server parameters BEFORE thread created, that will guarantee
-    // variable value visibility
-    max_workers = n_workers;
+    //max_workers = n_workers;
+    max_workers = 5;
     listen_port = port;
 
-    // The pthread_create function creates a new thread.
-    //
-    // The first parameter is a pointer to a pthread_t variable, which we can use
-    // in the remainder of the program to manage this thread.
-    //
-    // The second parameter is used to specify the attributes of this new thread
-    // (e.g., its stack size). We can leave it NULL here.
-    //
-    // The third parameter is the function this thread will run. This function *must*
-    // have the following prototype:
-    //    void *f(void *args);
-    //
-    // Note how the function expects a single parameter of type void*. We are using it to
-    // pass this pointer in order to proxy call to the class member function. The fourth
-    // parameter to pthread_create is used to specify this parameter value.
-    //
-    // The thread we are creating here is the "server thread", which will be
-    // responsible for listening on port 23300 for incoming connections. This thread,
-    // in turn, will spawn threads to service each incoming connection, allowing
-    // multiple clients to connect simultaneously.
-    // Note that, in this particular example, creating a "server thread" is redundant,
-    // since there will only be one server thread, and the program's main thread (the
-    // one running main()) could fulfill this purpose.
     running.store(true);
-    if (pthread_create(&accept_thread, NULL, ServerImpl::RunAcceptorProxy, this) < 0) {
+    if (pthread_create(&accept_thread, nullptr, ServerImpl::RunAcceptorProxy, this) < 0) {
         throw std::runtime_error("Could not create server thread");
     }
 }
@@ -90,28 +86,29 @@ void ServerImpl::Start(uint32_t port, uint16_t n_workers) {
 // See Server.h
 void ServerImpl::Stop() {
     std::cout << "network debug: " << __PRETTY_FUNCTION__ << std::endl;
+
     running.store(false);
+
+    Join();
 }
 
 // See Server.h
 void ServerImpl::Join() {
     std::cout << "network debug: " << __PRETTY_FUNCTION__ << std::endl;
+
+    //TODO: Is it necessary
+    std::unique_lock<std::mutex> lock(connections_mutex);
+
     pthread_join(accept_thread, 0);
+    for (auto&& thread : connections)
+        pthread_join(thread, 0);
+
+    connections.clear();
 }
 
 // See Server.h
 void ServerImpl::RunAcceptor() {
     std::cout << "network debug: " << __PRETTY_FUNCTION__ << std::endl;
-
-    // For IPv4 we use struct sockaddr_in:
-    // struct sockaddr_in {
-    //     short int          sin_family;  // Address family, AF_INET
-    //     unsigned short int sin_port;    // Port number
-    //     struct in_addr     sin_addr;    // Internet address
-    //     unsigned char      sin_zero[8]; // Same size as struct sockaddr
-    // };
-    //
-    // Note we need to convert the port to network order
 
     struct sockaddr_in server_addr;
     std::memset(&server_addr, 0, sizeof(server_addr));
@@ -119,10 +116,7 @@ void ServerImpl::RunAcceptor() {
     server_addr.sin_port = htons(listen_port); // TCP port number
     server_addr.sin_addr.s_addr = INADDR_ANY;  // Bind to any address
 
-    // Arguments are:
-    // - Family: IPv4
-    // - Type: Full-duplex stream (reliable)
-    // - Protocol: TCP
+
     int server_socket = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (server_socket == -1) {
         throw std::runtime_error("Failed to open socket");
@@ -141,8 +135,6 @@ void ServerImpl::RunAcceptor() {
         throw std::runtime_error("Socket setsockopt() failed");
     }
 
-    // Bind the socket to the address. In other words let kernel know data for what address we'd
-    // like to see in the socket
     if (bind(server_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1) {
         close(server_socket);
         throw std::runtime_error("Socket bind() failed");
@@ -163,34 +155,112 @@ void ServerImpl::RunAcceptor() {
     while (running.load()) {
         std::cout << "network debug: waiting for connection..." << std::endl;
 
-        // When an incoming connection arrives, accept it. The call to accept() blocks until
-        // the incoming connection arrives
         if ((client_socket = accept(server_socket, (struct sockaddr *)&client_addr, &sinSize)) == -1) {
             close(server_socket);
             throw std::runtime_error("Socket accept() failed");
         }
 
-        // TODO: Start new thread and process data from/to connection
-        {
-            std::string msg = "TODO: start new thread and process memcached protocol instead";
+        std::lock_guard<std::mutex> lock(connections_mutex);
+
+        if (connections.size() >= max_workers){
+            std::string msg = "Too much connections, try latter\r\n";
+
             if (send(client_socket, msg.data(), msg.size(), 0) <= 0) {
                 close(client_socket);
                 close(server_socket);
                 throw std::runtime_error("Socket send() failed");
             }
             close(client_socket);
+        } else {
+            pthread_t worker;
+            auto args = std::make_pair(this, client_socket);
+
+            if (pthread_create(&worker, nullptr, ServerImpl::RunConnectionProxy, &args) < 0) {
+                close(client_socket);
+                close(server_socket);
+                throw std::runtime_error("Thread create() error in acceptor");
+            }
+            connections.insert(worker);
         }
     }
-
-    // Cleanup on exit...
+    // Cleanup on exit..
     close(server_socket);
 }
 
 // See Server.h
-void ServerImpl::RunConnection() {
+void ServerImpl::RunConnection(int client_socket) {
     std::cout << "network debug: " << __PRETTY_FUNCTION__ << std::endl;
-    // TODO: All connection work is here
+    Afina::Protocol::Parser parser;
+
+    const size_t buff_size = 1024;
+    char buff[buff_size];
+    std::string cur_data;
+    size_t parsed = 0;
+    ssize_t n;
+    memset(buff, 0, buff_size);
+
+    while ((n = recv(client_socket, buff, buff_size, 0)) > 0) {
+        cur_data.append(buff, n);
+        memset(buff, 0, buff_size);
+
+        while (parser.Parse(&cur_data[parsed], cur_data.size() - parsed, parsed)) {
+            uint32_t args_size;
+            auto command = parser.Build(args_size);
+
+            if (args_size != 0){
+                size_t rest = parsed + args_size + msg_end.size() - cur_data.size();
+                if (rest > 0) {
+                    if (recv(client_socket, buff, rest, MSG_WAITALL) < 0) {
+                        throw std::runtime_error("Error");
+                    }
+                    cur_data.append(buff, rest);
+                    memset(buff, 0, buff_size);
+                }
+            }
+
+            /* TODO: Change to std::exception, 'get' doesn't have value
+            if (cur_data is not valid) {
+                std::string msg = "Wrong value bytes\r\n";
+                if (send(client_socket, msg.data(), msg.size(), 0) <= 0){
+                    close(client_socket);
+                    throw std::runtime_error("Error");
+                }
+            }
+            */
+
+            std::string out;
+            command->Execute(*pStorage, cur_data.substr(parsed, args_size), out);
+            if (send(client_socket, (out + msg_end).data(), out.size() + msg_end.size(), 0) <= 0){
+                throw std::runtime_error("Error");
+            }
+            std::cout << out << std::endl;
+            parser.Reset();
+            if (args_size > 0) {
+                cur_data = cur_data.substr(parsed + args_size + msg_end.size());
+            } else {
+                cur_data.clear();
+            }
+            parsed = 0;
+
+            if (!running.load()) {
+                std::cout << "!running.load()" << std::endl;
+                return;
+            }
+        }
+        if (cur_data.size() > buff_size * 2) {
+            std::string msg = "Too much symbols\r\n";
+            if (send(client_socket, msg.data(), msg.size(), 0) <= 0){
+                throw std::runtime_error("Error");
+            }
+        }
+    }
+    //usleep(60000000);
+    if (n < 0){
+        throw std::runtime_error("Error");
+    }
+    close(client_socket);
 }
+
 
 } // namespace Blocking
 } // namespace Network

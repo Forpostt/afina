@@ -9,7 +9,7 @@ namespace Backend {
 bool MapBasedGlobalLockImpl::Put(const std::string &key, const std::string &value) { 
     std::lock_guard<std::mutex> lock(_mutex);
     if (key.size() + value.size() > _max_size)
-        return false;
+        throw std::runtime_error("key.size() + value.size() > max_size");
     
     std::reference_wrapper<const std::string> key_ref(key);
     auto obj = _hash_table.find(key_ref);
@@ -32,15 +32,13 @@ bool MapBasedGlobalLockImpl::Put(const std::string &key, const std::string &valu
         _size += obj->second->size();
         return true; 
     }
-    
-    return false;
 }
 
 // See MapBasedGlobalLockImpl.h
 bool MapBasedGlobalLockImpl::PutIfAbsent(const std::string &key, const std::string &value) { 
     std::lock_guard<std::mutex> lock(_mutex);
     if (key.size() + value.size() > _max_size)
-        return false;
+        throw std::runtime_error("key.size() + value.size() > max_size");
     
     std::reference_wrapper<const std::string> key_ref(key);
     if (_hash_table.find(key_ref) != _hash_table.end()){
@@ -61,7 +59,7 @@ bool MapBasedGlobalLockImpl::PutIfAbsent(const std::string &key, const std::stri
 bool MapBasedGlobalLockImpl::Set(const std::string &key, const std::string &value) { 
     std::lock_guard<std::mutex> lock(_mutex);
     if (key.size() + value.size() > _max_size)
-        return false;
+        throw std::runtime_error("key.size() + value.size() > max_size");
     
     std::reference_wrapper<const std::string> key_ref(key);
     auto obj = _hash_table.find(key_ref);

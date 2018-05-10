@@ -3,6 +3,9 @@
 
 #include <memory>
 #include <pthread.h>
+#include <atomic>
+
+#include <unordered_map>
 
 namespace Afina {
 
@@ -12,6 +15,7 @@ class Storage;
 namespace Network {
 namespace NonBlocking {
 
+class Connection;
 /**
  * # Thread running epoll
  * On Start spaws background thread that is doing epoll on the given server
@@ -44,13 +48,22 @@ public:
     void Join();
 
 protected:
+    void OnRun(int server_socket);
+
+private:
+
+    pthread_t thread;
     /**
      * Method executing by background thread
      */
-    void OnRun(void *args);
+    static void* OnRunProxy(void *p);
 
-private:
-    pthread_t thread;
+    std::atomic<bool> running;
+    std::atomic<int> server_fd;
+
+    std::shared_ptr<Afina::Storage> pStorage;
+
+    std::unordered_map<int, std::unique_ptr<Afina::Network::NonBlocking::Connection>> connections;
 };
 
 } // namespace NonBlocking

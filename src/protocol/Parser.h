@@ -55,6 +55,8 @@ public:
 
     inline const std::string &Name() const { return name; }
 
+    bool parseComplete() const;
+
 private:
     /**
      * State of the command parser. Prefixes are:

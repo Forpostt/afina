@@ -95,7 +95,7 @@ int main(int argc, char *argv[]) {
         abort();
     }
 
-    efd = epoll_create1(0);
+    efd = epoll_create(10);
     if (efd == -1) {
         perror("epoll_create");
         abort();
@@ -104,6 +104,7 @@ int main(int argc, char *argv[]) {
     event.data.fd = sfd;
     event.events = EPOLLIN | EPOLLET;
     s = epoll_ctl(efd, EPOLL_CTL_ADD, sfd, &event);
+    printf("epoll create\n");
     if (s == -1) {
         perror("epoll_ctl");
         abort();

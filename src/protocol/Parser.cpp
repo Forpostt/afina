@@ -194,5 +194,9 @@ void Parser::Reset() {
     exprtime = 0;
 }
 
+bool Parser::parseComplete() const {
+    return parse_complete;
+}
+
 } // namespace Protocol
 } // namespace Afina

@@ -11,7 +11,7 @@ no warnings 'once';
 $Data::Dumper::Deparse = 1;
 
 my $server = $ENV{AFINA_SERVER} // "127.0.0.1";
-my $port = $ENV{AFINA_PORT} // "8080";
+my $port = $ENV{AFINA_PORT} // "8000";
 my $silent = 0;
 
 my ($rfifo, $wfifo) = @ENV{"AFINA_RFIFO", "AFINA_WFIFO"};

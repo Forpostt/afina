@@ -33,27 +33,34 @@ Connection::~Connection() {
 void Connection::Read() {
     std::cout << "network debug: " << __PRETTY_FUNCTION__ << std::endl;
 
-    const size_t buff_size = 1024;
-    char buff[buff_size];
-    ssize_t n;
-
+    //usleep(10000000);
     memset(buff, 0, buff_size);
 
-    n = recv(connection_fd, buff, buff_size, 0);
+    ssize_t n = recv(connection_fd, buff, buff_size, 0);
+
     if (n < 0)
         throw std::runtime_error("Error with read from socket");
     else if (n == 0) {
-        state = Connection::State::st_closed;
+        state = Connection::State::socket_closed;
         return;
     }
 
     input_data.append(buff, n);
 
     if (!parser.parseComplete()) {
-        parser.Parse(&input_data[parsed], n, parsed);
+        try {
+            parser.Parse(&input_data[parsed], n, parsed);
+        } catch (std::invalid_argument &e) {
+            input_data.clear();
+            output_data = e.what();
+            output_data += ":ERROR";
+            state = Connection::State::socket_send;
+            return;
+        }
     }
 
     if (parser.parseComplete()) {
+
         uint32_t args_size, rest;
         auto command = parser.Build(args_size);
 
@@ -61,16 +68,16 @@ void Connection::Read() {
         if (args_size != 0)
             rest += msg_end.size();
 
-        if (input_data.size() - parsed - rest < 0)
+        if (input_data.size() - parsed - rest < 0){
             return;
-        else {
+        } else {
             command->Execute(*pStorage, input_data.substr(parsed, args_size), output_data);
             output_data += msg_end;
 
             parser.Reset();
             input_data = input_data.substr(parsed + rest);
             parsed = 0;
-            state = Connection::State::st_send;
+            state = Connection::State::socket_send;
             return;
         }
     }
@@ -79,21 +86,28 @@ void Connection::Read() {
 void Connection::Send() {
     std::cout << "network debug: " << __PRETTY_FUNCTION__ << std::endl;
 
-    ssize_t n = 0;
-    n = send(connection_fd, output_data.data(), output_data.size(), 0);
+    ssize_t n = send(connection_fd, output_data.data(), output_data.size(), 0);
 
     if (n < 0) {
         throw std::runtime_error("Error with send in socket");
     } else if (n == 0) {
-        state = Connection::State::st_closed;
+        state = Connection::State::socket_closed;
         return;
     } else if (n < output_data.size()) {
+        output_data = output_data.substr(n);
         return;
     } else {
         output_data.clear();
         if (!input_data.empty()) {
 
-            parser.Parse(&input_data[0], input_data.size(), parsed);
+            try {
+                parser.Parse(input_data, parsed);
+            } catch (std::invalid_argument &e) {
+                input_data.clear();
+                output_data = e.what();
+                output_data += ":ERROR\r\n";
+                return;
+            }
 
             if (parser.parseComplete()) {
                 uint32_t args_size, rest;
@@ -104,21 +118,23 @@ void Connection::Send() {
                     rest += msg_end.size();
 
                 if (input_data.size() - parsed - rest < 0) {
-                    state = Connection::st_read;
+                    state = Connection::socket_read;
                     return;
                 } else {
                     command->Execute(*pStorage, input_data.substr(parsed, args_size), output_data);
+                    output_data += msg_end;
+
                     parser.Reset();
                     input_data = input_data.substr(parsed + rest);
                     parsed = 0;
                     return;
                 }
             } else {
-                state = Connection::st_read;
+                state = Connection::socket_read;
                 return;
             }
         } else {
-            state = Connection::st_read;
+            state = Connection::socket_read;
             return;
         }
     }

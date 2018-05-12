@@ -48,15 +48,17 @@ public:
     void Join();
 
 protected:
+
+    /**
+    * Method executing by background thread
+    */
     void OnRun(int server_socket);
 
 private:
 
-    pthread_t thread;
-    /**
-     * Method executing by background thread
-     */
     static void* OnRunProxy(void *p);
+
+    pthread_t thread;
 
     std::atomic<bool> running;
     std::atomic<int> server_fd;

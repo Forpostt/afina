@@ -25,8 +25,8 @@ int main(int argc,char **argv) {
 
     connect(Socket, (struct sockaddr *)&servaddr, sizeof(servaddr));
 
-    std::string out = "set foo 0 0 6\r\nfooval\r\n";
-
+    //std::string out = "set foo 0 0 6\r\nfooval\r\n";
+    std::string out = "asd";
     send(Socket, out.data(), out.size(), 0);
 
     usleep(10000000);

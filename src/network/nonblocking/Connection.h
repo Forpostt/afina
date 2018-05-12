@@ -10,16 +10,14 @@ namespace NonBlocking {
 
 class Connection {
 public:
+
     /**
      * All possible states of the connection
      */
     enum State{
-        // The connection reads data from socket
-        st_read,
-        // The connection writes data to socket
-        st_send,
-        // The connection is closed
-        st_closed
+        socket_read,
+        socket_send,
+        socket_closed
     };
 
     Connection(int fd, std::shared_ptr<Afina::Storage> ps);
@@ -27,13 +25,13 @@ public:
 
     /**
      * The method is used when the corresponding socket is ready for reading.
-     * Use this method when epoll event is EPOLLIN.
+     * In case of epoll use when event is EPOLLIN.
      */
     void Read();
 
     /**
      * The method is used when the corresponding socket is ready for writing.
-     * Use this method when epoll event is EPOLLOUT.
+     * In case of epoll use when event is EPOLLOUT.
      */
     void Send();
 
@@ -51,9 +49,12 @@ private:
     std::string input_data;
     std::string output_data;
 
+    static const size_t buff_size = 1024;
+    char buff[buff_size];
+
     std::shared_ptr<Afina::Storage> pStorage;
 
-    Connection::State state = State::st_read;
+    Connection::State state = State::socket_read;
 };
 
 } // namespace NonBlocking

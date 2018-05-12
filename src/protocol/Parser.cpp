@@ -18,7 +18,7 @@ namespace Protocol {
 // See Parse.h
 bool Parser::Parse(const char *input, const size_t size, size_t &parsed) {
     size_t pos;
-    parsed = 0;
+    //parsed = 0;
 
     for (pos = 0; pos < size && !parse_complete; pos++) {
         char c = input[pos];
@@ -35,7 +35,7 @@ bool Parser::Parse(const char *input, const size_t size, size_t &parsed) {
                     state = State::sLF;
                     continue;
                 } else {
-                    throw std::runtime_error("Unknown command name");
+                    throw std::invalid_argument("Unknown command name");
                 }
             } else {
                 name.push_back(c);
@@ -85,7 +85,7 @@ bool Parser::Parse(const char *input, const size_t size, size_t &parsed) {
                 uint32_t f = (flags * 10) + (c - '0');
                 if (f < flags) {
                     // Overflow
-                    throw std::runtime_error("Flags field overflow");
+                    throw std::invalid_argument("Flags field overflow");
                 }
                 flags = f;
             }
@@ -133,7 +133,7 @@ bool Parser::Parse(const char *input, const size_t size, size_t &parsed) {
                 uint32_t b = (bytes * 10) + (c - '0');
                 if (b < bytes) {
                     // Overflow
-                    throw std::runtime_error("Bytes field overflow");
+                    throw std::invalid_argument("Bytes field overflow");
                 }
                 bytes = b;
             }
@@ -146,13 +146,13 @@ bool Parser::Parse(const char *input, const size_t size, size_t &parsed) {
             } else {
                 std::stringstream err;
                 err << "Invalid char " << (int)c << " at position " << (parsed + pos) << ", \\n expected";
-                throw std::runtime_error(err.str());
+                throw std::invalid_argument(err.str());
             }
             break;
         }
 
         default:
-            throw std::runtime_error("Unknown state");
+            throw std::invalid_argument("Unknown state");
         }
     }
 
@@ -178,7 +178,7 @@ std::unique_ptr<Execute::Command> Parser::Build(uint32_t &body_size) const {
     } else if (name == "stats") {
         return std::unique_ptr<Execute::Command>(new Execute::Stats());
     } else {
-        throw std::runtime_error("Unsupported command");
+        throw std::invalid_argument("Unsupported command");
     }
 }
 

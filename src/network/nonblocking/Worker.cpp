@@ -21,8 +21,8 @@
 #include "Utils.h"
 #include "Connection.h"
 
-#define MAXEVENTS 64
-#define MAXCONN 64
+#define MAXEVENTS 32
+#define MAXCONN 128
 #define EPOLLEXCLUSIVE 1 << 28
 
 namespace Afina {
@@ -34,7 +34,6 @@ Worker::Worker(std::shared_ptr<Afina::Storage> ps): pStorage(ps) {}
 
 // See Worker.h
 Worker::~Worker() {
-    //TODO: check here
     Stop();
     Join();
 }
@@ -92,6 +91,7 @@ inline void modifyEpollContext(int epollfd, int operation, int fd, uint32_t even
 
 // See Worker.h
 void Worker::OnRun(int server_socket) {
+    //usleep(500000);
     std::cout << "network debug: " << __PRETTY_FUNCTION__ << std::endl;
 
     int epollfd;
@@ -121,14 +121,12 @@ void Worker::OnRun(int server_socket) {
 
                 if (events[i].events & EPOLLHUP || events[i].events & EPOLLERR) {
                     close(server_socket);
-                    std::cout << "EPOLLHUP || EPOLLERR" << std::endl;
-                    return;
+                    close(epollfd);
+                    throw std::runtime_error("EPOLLHUP || EPOLLERR on server socket");
                 }
 
                 while (1) {
-
                     client_socket = accept(server_socket, (struct sockaddr *)&client_addr, &sinSize);
-
                     if (client_socket == -1) {
                         if (errno == EAGAIN || errno == EWOULDBLOCK)
                             break;
@@ -154,11 +152,12 @@ void Worker::OnRun(int server_socket) {
                     if (item == connections.end()) {
                         throw std::runtime_error("Error with find socket in hash table");
                     } else {
+
                         item->second->Read();
 
-                        if (item->second->getState() == Connection::State::st_send) {
+                        if (item->second->getState() == Connection::State::socket_send) {
                             modifyEpollContext(epollfd, EPOLL_CTL_MOD, item->first, EPOLLERR | EPOLLOUT | EPOLLHUP);
-                        } else if (item->second->getState() == Connection::State::st_closed) {
+                        } else if (item->second->getState() == Connection::State::socket_closed) {
                             close(item->first);
                             connections.erase(item);
                         }
@@ -170,11 +169,12 @@ void Worker::OnRun(int server_socket) {
                     if (item == connections.end()){
                         throw std::runtime_error("Error");
                     } else {
+
                         item->second->Send();
 
-                        if (item->second->getState() == Connection::State::st_read) {
+                        if (item->second->getState() == Connection::State::socket_read) {
                             modifyEpollContext(epollfd, EPOLL_CTL_MOD, item->first, EPOLLERR | EPOLLIN | EPOLLHUP);
-                        } else if (item->second->getState() == Connection::State::st_closed) {
+                        } else if (item->second->getState() == Connection::State::socket_closed) {
                             close(item->first);
                             connections.erase(item);
                         }

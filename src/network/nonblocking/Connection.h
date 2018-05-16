@@ -44,7 +44,6 @@ private:
     int connection_fd;
 
     Afina::Protocol::Parser parser;
-    size_t parsed = 0;
 
     std::string input_data;
     std::string output_data;

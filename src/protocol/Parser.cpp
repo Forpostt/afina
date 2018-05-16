@@ -18,7 +18,7 @@ namespace Protocol {
 // See Parse.h
 bool Parser::Parse(const char *input, const size_t size, size_t &parsed) {
     size_t pos;
-    //parsed = 0;
+    parsed = 0;
 
     for (pos = 0; pos < size && !parse_complete; pos++) {
         char c = input[pos];

@@ -73,8 +73,7 @@ void ServerImpl::Start(uint32_t port, uint16_t n_workers) {
         throw std::runtime_error("Unable to mask SIGPIPE");
     }
 
-    //max_workers = n_workers;
-    max_workers = 5;
+    max_workers = n_workers;
     listen_port = port;
 
     running.store(true);
@@ -96,7 +95,6 @@ void ServerImpl::Stop() {
 void ServerImpl::Join() {
     std::cout << "network debug: " << __PRETTY_FUNCTION__ << std::endl;
 
-    //TODO: Is it necessary
     std::unique_lock<std::mutex> lock(connections_mutex);
 
     pthread_join(accept_thread, 0);
@@ -195,7 +193,8 @@ void ServerImpl::RunConnection(int client_socket) {
     const size_t buff_size = 1024;
     char buff[buff_size];
     std::string cur_data;
-    size_t parsed = 0;
+    std::string out;
+
     ssize_t n;
     memset(buff, 0, buff_size);
 
@@ -203,50 +202,50 @@ void ServerImpl::RunConnection(int client_socket) {
         cur_data.append(buff, n);
         memset(buff, 0, buff_size);
 
-        while (parser.Parse(&cur_data[parsed], cur_data.size() - parsed, parsed)) {
-            uint32_t args_size;
-            auto command = parser.Build(args_size);
+        while (true) {
+            size_t parsed = 0;
 
-            if (args_size != 0){
-                size_t rest = parsed + args_size + msg_end.size() - cur_data.size();
-                if (rest > 0) {
-                    if (recv(client_socket, buff, rest, MSG_WAITALL) < 0) {
+            if (!parser.parseComplete()) {
+                try {
+                    parser.Parse(cur_data, parsed);
+                    cur_data = cur_data.substr(parsed);
+                } catch (std::invalid_argument &e) {
+                    cur_data.clear();
+                    out = e.what();
+                    out += ":ERROR\r\n";
+                    if (send(client_socket, out.data(), out.size(), 0) <= 0){
                         throw std::runtime_error("Error");
                     }
-                    cur_data.append(buff, rest);
-                    memset(buff, 0, buff_size);
+                    out.clear();
+                    break;
                 }
             }
 
-            /* TODO: Change to std::exception, 'get' doesn't have value
-            if (cur_data is not valid) {
-                std::string msg = "Wrong value bytes\r\n";
-                if (send(client_socket, msg.data(), msg.size(), 0) <= 0){
-                    close(client_socket);
+            if (!parser.parseComplete())
+                break;
+
+            uint32_t args_size, rest;
+            auto command = parser.Build(args_size);
+
+            rest = args_size;
+            if (args_size != 0)
+                rest += msg_end.size();
+
+            if (cur_data.size() - rest < 0){
+                break;
+            } else {
+                command->Execute(*pStorage, cur_data.substr(0, args_size), out);
+                out += msg_end;
+                if (send(client_socket, out.data(), out.size(), 0) <= 0){
                     throw std::runtime_error("Error");
                 }
-            }
-            */
 
-            std::string out;
-            command->Execute(*pStorage, cur_data.substr(parsed, args_size), out);
-            if (send(client_socket, (out + msg_end).data(), out.size() + msg_end.size(), 0) <= 0){
-                throw std::runtime_error("Error");
-            }
-            std::cout << out << std::endl;
-            parser.Reset();
-            if (args_size > 0) {
-                cur_data = cur_data.substr(parsed + args_size + msg_end.size());
-            } else {
-                cur_data.clear();
-            }
-            parsed = 0;
-
-            if (!running.load()) {
-                std::cout << "!running.load()" << std::endl;
-                return;
+                parser.Reset();
+                cur_data = cur_data.substr(rest);
+                out.clear();
             }
         }
+
         if (cur_data.size() > buff_size * 2) {
             std::string msg = "Too much symbols\r\n";
             if (send(client_socket, msg.data(), msg.size(), 0) <= 0){

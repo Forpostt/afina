@@ -46,7 +46,7 @@ void Engine::yield() {
 void Engine::sched(void *routine_) {
     auto routine = (context *)routine_;
 
-    if(!routine_ || routine_ == cur_routine){
+    if(!routine || routine == cur_routine){
         return;
     }
 

@@ -6,6 +6,7 @@
 #include <memory>
 #include <stdexcept>
 #include <utility>
+#include <algorithm>
 
 #include <pthread.h>
 #include <signal.h>
@@ -32,7 +33,6 @@ void *ServerImpl::RunAcceptorProxy(void *p) {
     } catch (std::runtime_error &ex) {
         std::cerr << "Server fails: " << ex.what() << std::endl;
     }
-
     return 0;
 }
 
@@ -40,15 +40,12 @@ void *ServerImpl::RunConnectionProxy(void *p) {
     auto *item = reinterpret_cast<std::pair<ServerImpl *, int> *>(p);
     try {
         item->first->RunConnection(item->second);
+        close(item->second);
     } catch (std::runtime_error &ex) {
         std::cerr << "Connection fails: " << ex.what() << std::endl;
         close(item->second);
     }
     std::cout << "End of work client" << std::endl;
-    {
-        std::lock_guard<std::mutex> lock(item->first->connections_mutex);
-        item->first->connections.erase(pthread_self());
-    }
     return 0;
 }
 
@@ -85,23 +82,18 @@ void ServerImpl::Start(uint32_t port, uint16_t n_workers) {
 // See Server.h
 void ServerImpl::Stop() {
     std::cout << "network debug: " << __PRETTY_FUNCTION__ << std::endl;
-
     running.store(false);
-
     Join();
 }
 
 // See Server.h
 void ServerImpl::Join() {
     std::cout << "network debug: " << __PRETTY_FUNCTION__ << std::endl;
-
+    //pthread_join(accept_thread, NULL);    it's can be already done
     std::unique_lock<std::mutex> lock(connections_mutex);
-
-    pthread_join(accept_thread, 0);
-    for (auto&& thread : connections)
-        pthread_join(thread, 0);
-
-    connections.clear();
+    while (!connections.empty()) {
+        connections_cv.wait(lock);
+    }
 }
 
 // See Server.h
@@ -160,26 +152,21 @@ void ServerImpl::RunAcceptor() {
 
         std::lock_guard<std::mutex> lock(connections_mutex);
 
-        if (connections.size() >= max_workers){
-            std::string msg = "Too much connections, try latter\r\n";
-
-            if (send(client_socket, msg.data(), msg.size(), 0) <= 0) {
-                close(client_socket);
-                close(server_socket);
-                throw std::runtime_error("Socket send() failed");
-            }
+        if (connections.size() >= max_workers) {
             close(client_socket);
-        } else {
-            pthread_t worker;
-            auto args = std::make_pair(this, client_socket);
-
-            if (pthread_create(&worker, nullptr, ServerImpl::RunConnectionProxy, &args) < 0) {
-                close(client_socket);
-                close(server_socket);
-                throw std::runtime_error("Thread create() error in acceptor");
-            }
-            connections.insert(worker);
+            continue;
         }
+
+        pthread_t worker;
+        auto args = std::make_pair(this, client_socket);
+
+        if (pthread_create(&worker, nullptr, RunConnectionProxy, &args) != 0) {
+            close(client_socket);
+        }
+
+        pthread_detach(worker);
+
+        connections.insert(worker);
     }
     // Cleanup on exit..
     close(server_socket);
@@ -188,76 +175,64 @@ void ServerImpl::RunAcceptor() {
 // See Server.h
 void ServerImpl::RunConnection(int client_socket) {
     std::cout << "network debug: " << __PRETTY_FUNCTION__ << std::endl;
+
     Afina::Protocol::Parser parser;
-
-    const size_t buff_size = 1024;
+    const size_t buff_size = 1 << 12;
     char buff[buff_size];
-    std::string cur_data;
-    std::string out;
-
+    size_t size = 0, parsed;
     ssize_t n;
-    memset(buff, 0, buff_size);
+    uint32_t args_size;
 
-    while ((n = recv(client_socket, buff, buff_size, 0)) > 0) {
-        cur_data.append(buff, n);
-        memset(buff, 0, buff_size);
-
-        while (true) {
-            size_t parsed = 0;
-
-            if (!parser.parseComplete()) {
-                try {
-                    parser.Parse(cur_data, parsed);
-                    cur_data = cur_data.substr(parsed);
-                } catch (std::invalid_argument &e) {
-                    cur_data.clear();
-                    out = e.what();
-                    out += ":ERROR\r\n";
-                    if (send(client_socket, out.data(), out.size(), 0) <= 0){
-                        throw std::runtime_error("Error");
-                    }
-                    out.clear();
-                    break;
-                }
-            }
-
-            if (!parser.parseComplete())
-                break;
-
-            uint32_t args_size, rest;
-            auto command = parser.Build(args_size);
-
-            rest = args_size;
-            if (args_size != 0)
-                rest += msg_end.size();
-
-            if (cur_data.size() - rest < 0){
-                break;
-            } else {
-                command->Execute(*pStorage, cur_data.substr(0, args_size), out);
-                out += msg_end;
-                if (send(client_socket, out.data(), out.size(), 0) <= 0){
-                    throw std::runtime_error("Error");
-                }
-
+    while (running.load()) {
+        if ((n = recv(client_socket, buff, buff_size, 0)) <= 0) {
+            break;
+        }
+        size = n;
+        std::cout << buff << std::endl;
+        try {
+            while (parser.Parse(buff, size, parsed)) {
+                auto command = parser.Build(args_size);
                 parser.Reset();
-                cur_data = cur_data.substr(rest);
-                out.clear();
-            }
-        }
+                if (args_size > 0) {
+                    args_size += 2; // "\r\n"
+                }
+                while (size - parsed < args_size) {
+                    if (size == buff_size) {
+                        throw std::invalid_argument("The argument string is too long");
+                    }
+                    if ((n = recv(client_socket, &buff[size], buff_size - size, 0)) <= 0) {
+                        throw std::logic_error("Client off");
+                    }
+                    size += n;
+                }
+                std::string out, arg(&buff[parsed], std::max(0, (int) args_size - 2));
+                command->Execute(*pStorage, arg, out);
+                out += "\r\n";
 
-        if (cur_data.size() > buff_size * 2) {
-            std::string msg = "Too much symbols\r\n";
-            if (send(client_socket, msg.data(), msg.size(), 0) <= 0){
-                throw std::runtime_error("Error");
+                if (send(client_socket, out.data(), out.size(), 0) <= 0) {
+                    throw std::runtime_error("Socket send() failed");
+                }
+                if (size > parsed + args_size) {
+                    std::memmove(&buff[0], &buff[parsed + args_size], size - parsed - args_size);
+                }
+                size -= parsed + args_size;
             }
+        } catch (std::invalid_argument &e){
+            std::string out("SERVER_ERROR: ");
+            out += e.what();
+            out += "\r\n";
+            if (send(client_socket, out.data(), out.size(), 0) <= 0) {
+                throw std::runtime_error("Socket send() failed");
+            }
+        } catch (std::logic_error &e){
+            std::cout << e.what() << std::endl;
+            break;
         }
     }
-    //usleep(60000000);
-    if (n < 0){
-        throw std::runtime_error("Error");
-    }
-    close(client_socket);
+    //usleep(6000000);
+    std::lock_guard<std::mutex> lock(connections_mutex);
+    connections.erase(pthread_self());
+    connections_cv.notify_one();
 }
 
 

@@ -44,6 +44,8 @@ protected:
      */
     void RunConnection(int client_socket);
 
+    void Send(int client_socket, std::string& buf, int flags);
+
 private:
     static void *RunAcceptorProxy(void *p);
 

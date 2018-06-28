@@ -1,6 +1,7 @@
 #include "ServerImpl.h"
 
 #include <cassert>
+#include <cerrno>
 #include <cstring>
 #include <iostream>
 #include <memory>
@@ -162,14 +163,29 @@ void ServerImpl::RunAcceptor() {
 
         if (pthread_create(&worker, nullptr, RunConnectionProxy, &args) != 0) {
             close(client_socket);
+            continue;
         }
 
         pthread_detach(worker);
-
         connections.insert(worker);
     }
     // Cleanup on exit..
     close(server_socket);
+}
+
+void ServerImpl::Send(int client_socket, std::string& buf, int flags) {
+    ssize_t n, size = 0;
+    while (size < buf.size()) {
+        n = send(client_socket, buf.c_str() + size, buf.size() - size, flags);
+        if (n == 0) {
+            throw std::logic_error("Client off");
+        } else if (n < 0) {
+            std::string err("Socket send() failed: ");
+            err += std::strerror(errno);
+            throw std::runtime_error(err);
+        }
+        size += n;
+    }
 }
 
 // See Server.h
@@ -179,16 +195,22 @@ void ServerImpl::RunConnection(int client_socket) {
     Afina::Protocol::Parser parser;
     const size_t buff_size = 1 << 12;
     char buff[buff_size];
+    std::string err;
     size_t size = 0, parsed;
     ssize_t n;
     uint32_t args_size;
 
     while (running.load()) {
-        if ((n = recv(client_socket, buff, buff_size, 0)) <= 0) {
+        n = recv(client_socket, buff, buff_size, 0);
+        if (n == 0) {
             break;
+        } else if (n < 0) {
+            err += "Socket recv() failed: ";
+            err += std::strerror(errno);
+            throw std::runtime_error(err);
         }
         size = n;
-        std::cout << buff << std::endl;
+
         try {
             while (parser.Parse(buff, size, parsed)) {
                 auto command = parser.Build(args_size);
@@ -200,20 +222,26 @@ void ServerImpl::RunConnection(int client_socket) {
                     if (size == buff_size) {
                         throw std::invalid_argument("The argument string is too long");
                     }
-                    if ((n = recv(client_socket, &buff[size], buff_size - size, 0)) <= 0) {
+
+                    n = recv(client_socket, buff + size, buff_size - size, 0);
+                    if (n == 0) {
                         throw std::logic_error("Client off");
+                    } else if (n < 0) {
+                        err += "Socket recv() failed: ";
+                        err += std::strerror(errno);
+                        throw std::runtime_error(err);
                     }
+
                     size += n;
                 }
-                std::string out, arg(&buff[parsed], std::max(0, (int) args_size - 2));
+                std::string out, arg(buff + parsed, std::max(0, (int) args_size - 2));
                 command->Execute(*pStorage, arg, out);
                 out += "\r\n";
 
-                if (send(client_socket, out.data(), out.size(), 0) <= 0) {
-                    throw std::runtime_error("Socket send() failed");
-                }
+                ServerImpl::Send(client_socket, out, 0);
+
                 if (size > parsed + args_size) {
-                    std::memmove(&buff[0], &buff[parsed + args_size], size - parsed - args_size);
+                    std::memmove(buff, buff + parsed + args_size, size - parsed - args_size);
                 }
                 size -= parsed + args_size;
             }
@@ -221,9 +249,7 @@ void ServerImpl::RunConnection(int client_socket) {
             std::string out("SERVER_ERROR: ");
             out += e.what();
             out += "\r\n";
-            if (send(client_socket, out.data(), out.size(), 0) <= 0) {
-                throw std::runtime_error("Socket send() failed");
-            }
+            ServerImpl::Send(client_socket, out, 0);
         } catch (std::logic_error &e){
             std::cout << e.what() << std::endl;
             break;
